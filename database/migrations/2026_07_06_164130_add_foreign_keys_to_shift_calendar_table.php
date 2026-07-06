@@ -1,0 +1,32 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::table('shift_calendar', function (Blueprint $table) {
+            $table->foreign(['sc_b_id'], 'fk_fh_shift_calendar_fh_businesses')->references(['b_id'])->on('businesses')->onUpdate('restrict')->onDelete('restrict');
+            $table->foreign(['sc_emp_id'], 'fk_fh_shift_calendar_fh_employees')->references(['emp_id'])->on('employees')->onUpdate('restrict')->onDelete('restrict');
+            $table->foreign(['sc_pst_id'], 'fk_fh_shift_calendar_fh_policy_shift_timings')->references(['pst_id'])->on('policy_shift_timings')->onUpdate('restrict')->onDelete('restrict');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('shift_calendar', function (Blueprint $table) {
+            $table->dropForeign('fk_fh_shift_calendar_fh_businesses');
+            $table->dropForeign('fk_fh_shift_calendar_fh_employees');
+            $table->dropForeign('fk_fh_shift_calendar_fh_policy_shift_timings');
+        });
+    }
+};
