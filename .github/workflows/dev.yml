@@ -1,0 +1,19 @@
+name: Publish website to Web Server (cPanel)
+on:
+  push:
+    branches:
+      - DEV
+jobs:
+  web-deploy:
+    name: 🎉 Deploy
+    runs-on: ubuntu-latest
+    steps:
+    - name: 🚚 Get latest code
+      uses: actions/checkout@v3
+
+    - name: 📂 Sync files
+      uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+      with:
+        server: ${{ secrets.WEB_FTP_SERVER }}
+        username: ${{ secrets.WEB_FTP_USER }}
+        password: ${{ secrets.WEB_FTP_PASS }}

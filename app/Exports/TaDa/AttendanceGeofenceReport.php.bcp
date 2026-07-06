@@ -1,0 +1,60 @@
+<?php
+
+namespace App\Exports\TaDa;
+
+use Maatwebsite\Excel\Concerns\FromCollection;
+use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Concerns\ShouldAutoSize;
+use Illuminate\Support\Collection;
+
+class AttendanceGeofenceReport implements FromCollection, WithHeadings, ShouldAutoSize
+{
+    protected $rows;
+
+    public function __construct(array $rows)
+    {
+        $this->rows = $rows;
+    }
+
+    public function collection()
+    {
+        return collect($this->rows)->map(function ($r, $i) {
+            return [
+                'S No' => $i + 1,
+                'Employee Code' => $r['Employee Code'] ?? '---',
+                'Employee Name' => $r['Employee Name'] ?? '---',
+                'Branch' => $r['Branch'] ?? '---',
+                'Department' => $r['Department'] ?? '---',
+                'Designation' => $r['Designation'] ?? '---',
+                'Attendance Date' => $r['Attendance Date'] ?? '---',
+                'Attendance Status' => $r['Attendance Status'] ?? '---',
+                'Check In' => $r['Check In'] ?? '---',
+                'Check Out' => $r['Check Out'] ?? '---',
+                'Worked Hours' => $r['Worked Hours'] ?? '---',
+                'Geofencing Active' => $r['Geofencing Active'] ?? 'No',
+                'Travel Status' => $r['Travel Status'] ?? 'No Travel',
+                'Remarks' => $r['Remarks'] ?? '---',
+            ];
+        });
+    }
+
+    public function headings(): array
+    {
+        return [
+            'S No',
+            'Employee Code',
+            'Employee Name',
+            'Branch',
+            'Department',
+            'Designation',
+            'Attendance Date',
+            'Attendance Status',
+            'Check In',
+            'Check Out',
+            'Worked Hours',
+            'Geofencing Active',
+            'Travel Status',
+            'Remarks'
+        ];
+    }
+}

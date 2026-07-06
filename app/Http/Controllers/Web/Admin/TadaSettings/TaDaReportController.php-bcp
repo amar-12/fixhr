@@ -1,0 +1,418 @@
+<?php
+namespace App\Http\Controllers\Web\Admin\TadaSettings;
+use App\Exports\TaDa\ClaimExpenseReport;
+use App\Exports\TaDa\ClaimBasicReport;
+use App\Exports\TaDa\ClaimDetailReport;
+use App\Exports\TaDa\TravelDetailedReport;
+use App\Exports\TaDa\TravelAdvanceReport;
+use App\Exports\TaDa\ClaimSummaryReport;
+use App\Exports\TaDa\TravelReport;
+use App\Exports\TaDa\AttendanceGeofenceReport;
+use App\Models\AttendanceRecord;
+use App\Models\TadaRequestDetail;
+use App\Models\TadaRequestPlan;
+use App\Helpers\CentralLogics;
+use App\Exports\DailyAllowanceExport;
+use App\Exports\ClaimReportExport;
+use App\Http\Controllers\Api\TaDa\PolicyTravelType;
+use App\Http\Controllers\Controller;
+use App\Imports\VehicleImport;
+use App\Models\ApprovalModule;
+use App\Models\MasterTable;
+use App\Models\PolicyTadaCategory;
+use App\Models\PolicyTadaTravelAllowance;
+use App\Models\PolicyTadaTravelMode;
+use App\Models\TadaClaim;
+use App\Models\PolicyTadaTravelType;
+use App\Models\PolicyTadaTravelVehicle;
+use App\Models\PolicyTadaDailyAllowanceLodging;
+use App\Models\PolicyTadaDailyAllowance;
+use App\Models\PolicyTadaLodging;
+use App\Models\RuleCriterion;
+use Carbon\Carbon;
+use App\Models\TadaMetroCity;
+use App\Models\TravelPurpose;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Session;
+use RealRashid\SweetAlert\Facades\Alert;
+use Illuminate\Support\Facades\Validator;
+use Sabberworm\CSS\RuleSet\RuleSet;
+use Illuminate\Http\JsonResponse;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Exports\EmptySheetExport;
+use App\Exports\LodgingExport;
+use App\Exports\PolicyCategoryExport;
+use App\Exports\VehicleExport;
+use App\Imports\DailyAllowanceImport;
+use App\Imports\LodgingImport;
+use App\Imports\PolicyCategoryImport;
+use App\Models\TadaExpenseSetting;
+use Illuminate\Database\QueryException;
+class TaDaReportController extends Controller
+{
+	public function taDaReport(Request $request)
+	{  
+		$user = Auth::user();
+		$filters = $request->only(['travel_type', 'status', 'report_type', 'from_date', 'to_date', 'employee', 'purpose_type', 'claim_id', 'travel_id', 'designation', 'employee_status', 'branch', 'report_output', 'tap_location']);
+		
+		// Normalize empty-like values so missing status does not apply any filter
+		if (array_key_exists('status', $filters)) {
+			$rawStatus = is_null($filters['status']) ? null : trim((string)$filters['status']);
+			$filters['status'] = ($rawStatus === '' || strtolower($rawStatus) === 'null' || strtolower($rawStatus) === 'undefined')
+				? null
+				: $filters['status'];
+		}
+		
+		
+		$query = TadaRequestPlan::with([
+			'fh_tada_request_details',
+			'fh_tada_expenses',
+			'fh_tada_claim',
+			'fh_approval_status',
+			'fh_employee',
+			'fh_employee.fh_designation',
+			'fh_employee.fh_department',
+			'fh_employee.fh_grade',
+			'fh_policy_tada_travel_type.fh_travel_type',
+			'fh_tada_claim.fh_claim_status',
+			'fh_business.fh_currency',
+			'fh_employee.fh_branch',
+			'fh_employee.fh_employee_status',	
+			'fh_travel_purpose',
+			'fh_employee.fh_dealership',
+			'fh_tada_request_details.fh_policy_tada_travel_vehicle',
+			'fh_tada_expenses.fh_expense_type',
+			'fh_tada_claim.fh_approval_log_employee_wise',
+			'fh_tada_advance_approval_log',
+			'fh_tada_advance_approval_log.fh_adl_request_status',
+			'fh_tada_advance_approval_log.fh_process_approvers',
+			'fh_approval_status',
+			'fh_travel_vehicle',
+			'fh_tada_request_details.fh_policy_tada_travel_mode.fh_travel_mode',
+			'fh_plan_approval_log',
+			'fh_plan_approval_log.fh_employee',
+			'fh_plan_approval_log.fh_role',
+			'fh_plan_approval_log.fh_status',
+			
+			// 'fh_deduction_log'
+		])->where('trp_b_id', $user->emp_b_id);
+		
+		   
+		  // dd($query['fh_tada_request_details']); 
+			// Travel Type filter
+			$query->when(!empty($filters['travel_type']), function ($q) use ($filters) {
+				$q->where('trp_pttt_id', $filters['travel_type']);
+			});
+			
+			// Status filter - For claim reports, filter by claim status, not plan status
+			$query->when(!empty($filters['status']), function ($q) use ($filters) {
+				$q->whereHas('fh_tada_claim', function ($sub) use ($filters) {
+					$sub->where('tc_status', $filters['status']);
+				});
+			});
+			
+			
+			// Employee filter - Fixed to properly handle employee selection
+			if (!empty($filters['employee']) && $filters['employee'] !== '' && $filters['employee'] !== null) {
+				\Log::info('Applying employee filter:', ['employee_id' => $filters['employee']]);
+				$query->where('trp_emp_id', $filters['employee']);
+			} else {
+				\Log::info('No employee filter applied - showing all employees');
+			}
+			
+			// Purpose type filter
+			$query->when(!empty($filters['purpose_type']), function ($q) use ($filters) {
+				$q->where('trp_purpose', $filters['purpose_type']);
+			});
+			
+			// Claim ID filter
+			$query->when(!empty($filters['claim_id']), function ($q) use ($filters) {
+				$q->whereHas('fh_tada_claim', function ($sub) use ($filters) {
+					$sub->where('tc_unique_id', $filters['claim_id']);
+				});
+			});
+		
+			// Travel ID filter
+			$query->when(!empty($filters['travel_id']), function ($q) use ($filters) {
+				$q->where('trp_unique_id', $filters['travel_id']);
+			});
+		
+			// Designation filter
+			$query->when(!empty($filters['designation']), function ($q) use ($filters) {
+				$q->whereHas('fh_employee', function ($sub) use ($filters) {
+					$sub->where('emp_dg_id', $filters['designation']);
+				});
+			});
+			
+			// Employee Status filter
+			$query->when(!empty($filters['employee_status']), function ($q) use ($filters) {
+				$q->whereHas('fh_employee', function ($sub) use ($filters) {
+					$sub->where('emp_status', $filters['employee_status']);
+				});
+			});
+		
+			// Branch filter
+			$query->when(!empty($filters['branch']), function ($q) use ($filters) {
+				$q->whereHas('fh_employee', function ($sub) use ($filters) {
+					$sub->where('emp_br_id', $filters['branch']);
+				});
+			});
+			// Date range filters - Different logic for travel vs claim reports
+			$reportType = $filters['report_type'] ?? null;
+			$reportConfig = config('tada_reports');
+			$groupIds = $reportConfig['group_ids'] ?? [ 'travel' => [], 'claim' => [] ];
+			$isTravelReport = in_array($reportType, $groupIds['travel']);
+			$isClaimReport = in_array($reportType, $groupIds['claim']);
+
+			if ($isClaimReport) {
+				$query->whereHas('fh_tada_claim', function ($claim) {
+					$claim->whereColumn('tc_trp_id', 'trp_id');
+				});
+			}
+
+			if ($isTravelReport) {
+				// For travel reports, filter by travel start date from tada_request_plan table
+				$query->when(!empty($filters['from_date']), function ($q) use ($filters) {
+					$q->whereDate('trp_start_date', '>=', $filters['from_date']);
+				});
+				$query->when(!empty($filters['to_date']), function ($q) use ($filters) {
+					$q->whereDate('trp_start_date', '<=', $filters['to_date']);
+				});	
+			} elseif ($isClaimReport) {
+				// For claim reports, filter by created_at from tada_claim table
+				$query->when(!empty($filters['from_date']), function ($q) use ($filters) {
+					$q->whereHas('fh_tada_claim', function ($sub) use ($filters) {
+						$sub->whereDate('created_at', '>=', $filters['from_date']);
+					});
+				});
+				$query->when(!empty($filters['to_date']), function ($q) use ($filters) {
+					$q->whereHas('fh_tada_claim', function ($sub) use ($filters) {
+						$sub->whereDate('created_at', '<=', $filters['to_date']);
+					});
+				});
+			} else {
+				// Fallback to original behavior for unknown report types
+				$query->when(!empty($filters['from_date']), function ($q) use ($filters) {
+					$q->whereDate('created_at', '>=', $filters['from_date']);
+				});
+				$query->when(!empty($filters['to_date']), function ($q) use ($filters) {
+					$q->whereDate('created_at', '<=', $filters['to_date']);
+				});
+			}
+			
+			
+			try {
+				$filter_data = $query->get()->toArray();
+				
+				// Log the query and results for debugging
+				\Log::info('TADA Report Query Results', [
+					'filters' => $filters,
+					'count' => count($filter_data),
+					'has_claims' => !empty($filter_data) ? array_key_exists('fh_tada_claim', $filter_data[0] ?? []) : false
+				]);
+				
+				// Check if data is empty
+				// if (empty($filter_data)) {
+				// 	$statusMessage = !empty($filters['status']) ? ' for the selected status' : '';
+				// 	if ($request->ajax()) {
+				// 		return response()->json([
+				// 			'status' => 'no_data',
+				// 			'message' => 'No records found for the selected criteria' . $statusMessage,
+				// 		], 200);
+				// 	}
+				// 	Alert::warning('No Data', 'No records found for the selected criteria' . $statusMessage);
+				// 	return redirect()->back()->withInput();
+				// }
+				
+				// // Validate report_type
+				// if (empty($filters['report_type'])) {
+				// 	if ($request->ajax()) {
+				// 		return response()->json([
+				// 			'status' => 'error',
+				// 			'message' => 'Please select a report type',
+				// 		], 422);
+				// 	}
+				// 	Alert::error('Error', 'Please select a report type');
+				// 	return redirect()->back()->with('error', 'Please select a report type');
+				// }
+				
+				$reports = $reportConfig['reports'] ?? [];
+				$reportDef = $reports[$filters['report_type']] ?? null;
+				if (!$reportDef) {
+					if ($request->ajax()) {
+						return response()->json([
+							'status' => 'error',
+							'message' => 'Invalid report type',
+						], 422);
+					}
+					Alert::error('Error', 'Invalid report type');
+					return redirect()->back()->with('error', 'Invalid report type');
+				}
+
+				$exportClass = $reportDef['export'] ?? null;
+				if (!$exportClass) {
+					if ($request->ajax()) {
+						return response()->json([
+							'status' => 'error',
+							'message' => 'Export not configured for this report',
+						], 422);
+					}
+					Alert::error('Error', 'Export not configured for this report');
+					return redirect()->back()->with('error', 'Export not configured for this report');
+				}
+
+				$includeTapLocation = (bool)($reportDef['with_tap_location'] ?? false);
+				$tapLocationArg = $includeTapLocation ? ($filters['tap_location'] ?? '0') : null;
+
+				// If this is the travel-attendance-report, build attendance-based rows where
+				// employee geofencing is OFF AND they have attendance but NO travel in the selected date range.
+				if ($reportDef['slug'] === 'travel-attendance-report') {
+					$from = $filters['from_date'] ?? null;
+					$to = $filters['to_date'] ?? null;
+					$from = $from ?: Carbon::now()->startOfMonth()->format('Y-m-d');
+					$to   = $to   ?: Carbon::parse($from)->endOfMonth()->format('Y-m-d');
+
+					// Fetch attendances in range for the business
+					$attendances = AttendanceRecord::with('fh_employee.fh_department')
+						->where('atd_b_id', $user->emp_b_id)
+						->whereDate('atd_date', '>=', $from)
+						->whereDate('atd_date', '<=', $to)
+						->get();
+
+					$rows = [];
+					foreach ($attendances as $atd) {
+						$emp = $atd->fh_employee;
+						if (!$emp) continue;
+						// geofencing OFF
+						if ((int)($emp->emp_is_geofencing_active ?? 0) === 1) continue;
+
+						$empId = $emp->emp_id;
+						// count travel plans in the date range for this emp
+						$travelCount = TadaRequestPlan::where('trp_emp_id', $empId)
+							->whereDate('trp_start_date', '>=', $from)
+							->whereDate('trp_start_date', '<=', $to)
+							->count();
+
+						if ($travelCount > 0) continue; // only include those with NO travel
+
+						$totalDistance = TadaRequestDetail::whereHas('fh_policy_tada_request_plan', function ($q) use ($empId, $from, $to) {
+							$q->where('trp_emp_id', $empId)->whereDate('trp_start_date', '>=', $from)->whereDate('trp_start_date', '<=', $to);
+						})->sum('trd_total_distance');
+
+						$rows[] = [
+							'Employee Code' => $emp->emp_code ?? $empId,
+							'Employee Name' => $emp->emp_full_name ?? '---',
+							'Department' => $emp->fh_department['d_name'] ?? '---',
+							'Attendance Date' => date('d-m-Y', strtotime($atd->atd_date)),
+							'Check In' => optional($atd->atd_check_in_time)->format('H:i:s') ?? '---',
+							'Check Out' => optional($atd->atd_check_out_time)->format('H:i:s') ?? '---',
+							'Geofencing Active' => 'No',
+							'Travel Count' => $travelCount,
+							'Total Travel Distance' => $totalDistance ?: 0,
+							'Remarks' => $atd->atd_remark ?? '---'
+						];
+					}
+
+					$reportName = preg_replace('/\s+/', '_', $reportDef['name'] ?? 'Report');
+					$fileName = $reportName . '_' . now()->format('Y-m-d') . '.xlsx';
+					return Excel::download(new \App\Exports\TaDa\AttendanceGeofenceReport($rows), $fileName);
+				}
+
+				$reportName = preg_replace('/\s+/', '_', $reportDef['name'] ?? 'Report');
+				$fileName = $reportName . '_' . now()->format('Y-m-d') . '.xlsx';
+
+				$exportInstance = $includeTapLocation
+					? new $exportClass($filter_data, $tapLocationArg)
+					: new $exportClass($filter_data);
+
+				return Excel::download($exportInstance, $fileName);
+			} catch (QueryException $e) {
+				\Log::error('Database error in TADA report: ' . $e->getMessage());
+				if ($request->ajax()) {
+					return response()->json([
+						'status' => 'error',
+						'message' => 'An error occurred while fetching data. Please try again.'
+					], 500);
+				}
+				Alert::error('Database Error', 'An error occurred while fetching data. Please try again.');
+				return redirect()->back()->withInput();
+			} catch (\Exception $e) {
+				\Log::error('Error in TADA report: ' . $e->getMessage());
+				if ($request->ajax()) {
+					return response()->json([
+						'status' => 'error',
+						'message' => 'An unexpected error occurred. Please try again.'
+					], 500);
+				}
+				Alert::error('Error', 'An unexpected error occurred. Please try again.');
+				return redirect()->back()->withInput();
+			}
+	}
+
+	/**
+	 * Attendance + Geofence / No-travel report
+	 * params: date (Y-m-d)
+	 */
+	public function attendanceGeofenceReport(Request $request)
+	{
+		$user = Auth::user();
+		$date = $request->input('date', date('Y-m-d'));
+
+		$attendances = AttendanceRecord::with('fh_employee')
+			->where('atd_b_id', $user->emp_b_id)
+			->whereDate('atd_date', $date)
+			->get();
+
+		$rows = [];
+		foreach ($attendances as $atd) {
+			$emp = $atd->fh_employee;
+			if (!$emp) continue;
+			$empId = $emp->emp_id;
+
+			// travel count via plans starting that date
+			$trpCount = TadaRequestPlan::where('trp_emp_id', $empId)
+				->whereDate('trp_start_date', $date)->count();
+
+			// fallback: travel details / locations
+			$locCount = TadaRequestDetail::whereHas('fh_policy_tada_request_plan', function ($q) use ($empId, $date) {
+				$q->where('trp_emp_id', $empId)->whereDate('trp_start_date', $date);
+			})->count();
+
+			$travelCount = max($trpCount, $locCount);
+
+			$totalDistance = TadaRequestDetail::whereHas('fh_policy_tada_request_plan', function ($q) use ($empId, $date) {
+				$q->where('trp_emp_id', $empId)->whereDate('trp_start_date', $date);
+			})->sum('trd_total_distance');
+
+			$geofenceActive = (int)($emp->emp_is_geofencing_active ?? 0);
+
+			// include when geofencing OFF or when travel_count == 0
+			if ($geofenceActive === 0 || $travelCount === 0) {
+				$rows[] = [
+					'Employee ID' => $emp->emp_code ?? $empId,
+					'Employee Name' => $emp->emp_full_name ?? '---',
+					'Department' => $emp->fh_department['d_name'] ?? '---',
+					'Attendance Date' => date('d-m-Y', strtotime($atd->atd_date)),
+					'Check In' => optional($atd->atd_check_in_time)->format('H:i:s') ?? '---',
+					'Check Out' => optional($atd->atd_check_out_time)->format('H:i:s') ?? '---',
+					'Geofencing Active' => $geofenceActive === 1 ? 'Yes' : 'No',
+					'Travel Count' => $travelCount,
+					'Total Travel Distance' => $totalDistance ?: 0,
+					'Remarks' => $atd->atd_remark ?? '---'
+				];
+			}
+		}
+
+		if (empty($rows)) {
+			if ($request->ajax()) {
+				return response()->json(['status' => 'no_data', 'message' => 'No records found for the selected date'], 200);
+			}
+			Alert::warning('No Data', 'No records found for the selected date');
+			return redirect()->back()->withInput();
+		}
+
+		$fileName = 'attendance_geofence_report_' . now()->format('Y-m-d') . '.xlsx';
+		return Excel::download(new AttendanceGeofenceReport($rows), $fileName);
+	}
+}

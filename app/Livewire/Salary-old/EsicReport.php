@@ -1,0 +1,839 @@
+<?php
+namespace App\Livewire\Salary;
+use Livewire\Component;
+use App\Models\Business;
+use App\Models\Employee;
+use App\Models\FinancialYear;
+use App\Models\MasterTable;
+use App\Models\PayrollPeriod;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use App\Models\SalaryEmployeeSalary;
+use Illuminate\Support\Facades\Auth;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Models\ProcessedSalaryEarning;
+use App\Models\SalaryEmployeeEarnings;
+use App\Models\ProcessedEmployeeSalary;
+use App\Models\ProcessedSalaryDeduction;
+use App\Models\SalaryEmployeeDeductions;
+use App\Models\StatutoryDeduction;
+use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use Maatwebsite\Excel\Concerns\Exportable;
+use Maatwebsite\Excel\Concerns\WithEvents;
+use Maatwebsite\Excel\Concerns\WithStyles;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use Kreait\Firebase\RemoteConfig\UpdateType;
+use Maatwebsite\Excel\Concerns\WithHeadings;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use Maatwebsite\Excel\Concerns\FromCollection;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+class EsicReport extends Component
+{
+    public $search = '';
+    public $selectedEmployeeId;
+    public $employeeStatusId = null;
+    public $selectedPayrollPeriodId;
+    public $searchPayroll = '';
+    public $businessId;
+    public $selectedFYId;
+    public $searchFY = '';
+    public $selectedEmployeeDetailsHeading;
+    public $selectedEarningHeading;
+    public $selectedDeductionHeading;
+    public $selectedDaysInfoHeading;
+    public $selectedEmployeeEarningsHeading;
+    public $selectedEmployeeDeductionsHeading;
+    public $selectedPreEarningHeading;
+    public $selectedPostEarningHeading;
+    public $selectedNetPayHeading;
+    public function mount()
+    {
+        $user = Auth::user();
+        $this->businessId = $user->emp_b_id;
+        $this->selectedFYId = FinancialYear::where('fy_b_id', $user->emp_b_id)->where('fy_is_current', 1)->first();
+        $this->selectFY($this->selectedFYId->fy_id, $this->selectedFYId->fy_year);
+        // dd($this->searchFY);
+    }
+    public function selectEmployee($id, $name)
+    {
+        $this->selectedEmployeeId = $id;
+        $this->search = $name;
+    }
+    public function selectPayrollPeriod($id, $name)
+    {
+        $this->selectedPayrollPeriodId = $id;
+        $this->searchPayroll = $name;
+    }
+    public function selectFY($id, $name)
+    {
+        $this->selectedFYId = $id;
+        $this->searchFY = $name;
+    }
+    public function updated($property, $value)
+    {
+        if ($property === 'searchFY') {
+            $this->selectedPayrollPeriodId = null;
+            $this->selectedFYId = null;
+            $this->searchPayroll = '';
+            return;
+        }
+        if ($property === 'employeeStatusId') {
+            $this->selectedEmployeeId = null;
+            $this->search = '';
+            return;
+        }
+        // Generic mapping of search fields to selected fields
+        $mapping = [
+            'search' => 'selectedEmployeeId',
+            'searchPayroll' => 'selectedPayrollPeriodId',
+            'searchFY' => 'selectedFYId',
+        ];
+        // Apply the generic reset logic
+        if (array_key_exists($property, $mapping)) {
+            $this->{$mapping[$property]} = null;
+        }
+    }
+    public $filters = [
+        'employeeDetails' => false,
+        'employeeEarnings' => false,
+        'employeeDeductions' => false,
+        'daysInfo' => false,
+        'earningComponents' => false,
+        'deductionComponents' => false,
+    ];
+    public function toggleFilter($key, $state)
+    {
+        if (!array_key_exists($key, $this->filters)) return;
+        $this->filters[$key] = filter_var($state, FILTER_VALIDATE_BOOLEAN);
+        if ($this->filters[$key]) {
+            match ($key) {
+                'employeeDetails' => $this->selectedEmployeeDetailsHeading = 'Employee Details',
+                'employeeEarnings' => $this->selectedEmployeeEarningsHeading = '',
+                'employeeDeductions' => $this->selectedEmployeeDeductionsHeading = '',
+                'daysInfo' => $this->selectedDaysInfoHeading = 'Attendance Summary',
+                'earningComponents' => $this->selectedEarningHeading = 'Earning Components',
+                'deductionComponents' => $this->selectedDeductionHeading = 'Deduction Components',
+                default => null,
+            };
+        } else {
+            match ($key) {
+                'employeeDetails' => $this->selectedEmployeeDetailsHeading = null,
+                'employeeEarnings' => $this->selectedEmployeeEarningsHeading = null,
+                'employeeDeductions' => $this->selectedEmployeeDeductionsHeading = null,
+                'daysInfo' => $this->selectedDaysInfoHeading = null,
+                'earningComponents' => $this->selectedEarningHeading = null,
+                'deductionComponents' => $this->selectedDeductionHeading = null,
+                'preEarning' => $this->selectedPreEarningHeading = null,
+                'postEarning' => $this->selectedPostEarningHeading = null,
+                // 'deductions' => $this->selectedDeductionHeading = null,
+                'netPay' => $this->selectedNetPayHeading = null,
+                default => null,
+            };
+        }
+    }
+    public function render()
+    {
+        $financialYears = FinancialYear::where('fy_b_id', $this->businessId)->when($this->searchFY, function ($q) {
+            $q->where('fy_year', 'like', "%{$this->searchFY}%");
+        })->get();
+        $payrollPeriods = PayrollPeriod::where('pp_b_id', $this->businessId)
+            ->when($this->selectedFYId, function ($q) {
+                $q->where('pp_fy_id', $this->selectedFYId);
+            })
+            ->when(
+                strlen($this->searchPayroll) >= 1 && !$this->selectedPayrollPeriodId,
+                fn($q) => $q->where('pp_name', 'like', "%{$this->searchPayroll}%")
+            )
+            ->limit(100)
+            ->get();
+        $employees = collect();
+        if (!empty($this->search)) {
+            $employees = Employee::where('emp_role_id', '<>', 1)
+                ->where('emp_b_id', $this->businessId)
+                ->where(fn($q) => $q->where('emp_full_name', 'like', "%{$this->search}%")
+                    ->orWhere('emp_code', 'like', "%{$this->search}%"))
+                ->when($this->employeeStatusId, fn($q) => $q->where('emp_status', $this->employeeStatusId))
+                ->limit(100)
+                ->get();
+        }
+        $employeeStatus = MasterTable::where('m_group', 'STATUS')
+            ->limit(100)
+            ->select('m_id', 'm_name')
+            ->get();
+        return view('livewire.salary.esic-report', compact('financialYears', 'payrollPeriods', 'employees', 'employeeStatus'));
+    }
+    // public function generateReport()
+    // {
+    //     $this->validate([
+    //         'selectedFYId'          => 'required|exists:financial_years,fy_id',
+    //         'selectedPayrollPeriodId' => 'required|exists:payroll_periods,pp_id',
+    //     ], [
+    //         'selectedFYId.required'          => 'Financial year is required.',
+    //         'selectedPayrollPeriodId.required' => 'Payroll period is required.',
+    //     ]);
+    //     $payroll = PayrollPeriod::where('pp_b_id', $this->businessId)
+    //         ->where('pp_is_processed', 120)
+    //         ->find($this->selectedPayrollPeriodId);
+    //     if (! $payroll) {
+    //         $this->dispatch('show-alert', ['type' => 'error', 'message' => 'Invalid Payroll Period']);
+    //         return;
+    //     }
+    //     /* ------------------------------------------------------------------ */
+    //     /* 1. Base query – eager-load employee relations                     */
+    //     /* ------------------------------------------------------------------ */
+    //     $query = ProcessedEmployeeSalary::with([
+    //         'employee.fh_gender',
+    //         'employee.fh_department',
+    //         'employee.fh_designation',
+    //         'employee.employeeProjects',
+    //     ])
+    //         ->where('ps_payroll_id', $this->selectedPayrollPeriodId)
+    //         ->when($this->employeeStatusId, fn($q) => $q->whereHas('employee', fn($sq) => $sq->where('emp_status', $this->employeeStatusId)))
+    //         ->when($this->selectedEmployeeId, fn($q) => $q->where('ps_emp_id', $this->selectedEmployeeId));
+    //     $processedSalary = $query->get();
+    //     if ($processedSalary->isEmpty()) {
+    //         $this->dispatch('show-alert', ['type' => 'error', 'message' => 'No records found for the selected criteria.']);
+    //         return;
+    //     }
+    //     /* ------------------------------------------------------------------ */
+    //     /* 2. Pre-load earnings, deductions & salary master (N+1 → 4 queries) */
+    //     /* ------------------------------------------------------------------ */
+    //     $psIds   = $processedSalary->pluck('ps_id');
+    //     $empIds  = $processedSalary->pluck('ps_emp_id');
+    //     $allEarnings = ProcessedSalaryEarning::whereIn('ps_id', $psIds)
+    //         ->get()
+    //         ->groupBy('ps_id')
+    //         ->map(fn($g) => $g->pluck('ps_e_amount', 'ps_earning_type'));
+    //     $allDeductions = ProcessedSalaryDeduction::whereIn('ps_id', $psIds)
+    //         ->get()
+    //         ->groupBy('ps_id')
+    //         ->map(fn($g) => $g->pluck('ps_d_amount', 'ps_deduction_type'));
+    //     $allSalary = SalaryEmployeeSalary::where('es_b_id', $this->businessId)
+    //         ->whereIn('es_emp_id', $empIds)
+    //         ->with('salary_earnings.fh_salary_earning_type')
+    //         ->get()
+    //         ->groupBy('es_emp_id');
+    //     $allSalaryDed = SalaryEmployeeDeductions::with('fh_salary_deduction_type')
+    //         ->whereIn('es_d_emp_id', $empIds)
+    //         ->get()
+    //         ->groupBy('es_d_emp_id')
+    //         ->map(fn($g) => $g->pluck('es_d_amount', 'fh_salary_deduction_type.m_name'));
+    //     $employeeSalary = SalaryEmployeeSalary::with('fh_employee')
+    //         ->where('es_b_id', $this->businessId)
+    //         ->whereIn('es_emp_id', $empIds)
+    //         ->get();
+    //     /* ------------------------------------------------------------------ */
+    //     /* 3. ESI filter – only employees under threshold & have ESI No.     */
+    //     /* ------------------------------------------------------------------ */
+    //     $threshold = DB::table('statutory_deductions')
+    //         ->where('std_b_id', $this->businessId)
+    //         ->where('std_deduction_type_id', 352)
+    //         ->value('std_threshold');
+    //     $processedSalary = $processedSalary
+    //         ->filter(function ($item) use ($threshold, $employeeSalary) {
+    //             if (
+    //                 empty($item->employee) ||
+    //                 $item->employee->emp_esic_limit == 121 ||
+    //                 empty($item->employee->emp_esic_no)
+    //             ) {
+    //                 return false;
+    //             }
+    //             $gross = $employeeSalary->where('es_emp_id', $item->ps_emp_id)->first()->es_monthly_gross ?? null;
+    //             return $gross !== null && $gross < $threshold;
+    //         })
+    //         ->values();
+    //     if ($processedSalary->isEmpty()) {
+    //         $this->dispatch('show-alert', ['type' => 'error', 'message' => 'No ESI-eligible employees found.']);
+    //         return;
+    //     }
+    //     /* ------------------------------------------------------------------ */
+    //     /* 4. Column definitions – FIXED 'Present پایگاه' → 'Present Days'      */
+    //     /* ------------------------------------------------------------------ */
+    //     $basicInfoColumns = [
+    //         'S#',
+    //         'Emp Code',
+    //         'ESI No.',
+    //         'Employee Name',
+    //         'Gender',
+    //         'Aadhaar No',
+    //         'DOB',
+    //         'DOJ',
+    //         'DOL',
+    //         'Last Working Date',
+    //         'Department',
+    //         'Designation',
+    //         'Days',
+    //         'Arrear Days',
+    //         'Amount on Which ESI Deducted',
+    //         'Arrear Amount on Which ESI Deducted',
+    //         'ESI',
+    //         'Arrear ESI',
+    //         'Employer Contribution',
+    //         'Arrear Employer Contribution',
+    //         'Total',
+    //         'Arrear Total'
+    //     ];
+    //     $daysInfoColumns = [
+    //         'Days In Month',
+    //         'Workable Days',
+    //         'Days Worked',
+    //         'Present Days',
+    //         'Late Count',
+    //         'WeekOffs',
+    //         'UPL'
+    //     ];
+    //     /* ------------------------------------------------------------------ */
+    //     /* 5. Transform – ALL VALUES AS STRINGS (preserve leading zeros)     */
+    //     /* ------------------------------------------------------------------ */
+    //     $processedSalary = $processedSalary->transform(function ($item, $key) use (
+    //         $allEarnings,
+    //         $allDeductions,
+    //         $allSalary,
+    //         $allSalaryDed,
+    //         $basicInfoColumns,
+    //         $employeeSalary
+    //     ) {
+    //         $monthlyGross = $item->ps_monthly_gross ?? 0;
+    //         $employeeEsic = $monthlyGross * 0.75 / 100;
+    //         $employerEsic = $monthlyGross * 3.25 / 100;
+    //         $row = [
+    //             'S#'                                 => (string) ($key + 1),
+    //             'Emp Code'                              => (string) ($item->employee->emp_code ?? ''),
+    //             'ESI No.'                               => (string) ($item->employee->emp_esic_no ?? ''),
+    //             'Employee Name'                         => (string) ($item->employee->emp_full_name ?? ''),
+    //             'Gender'                                => (string) ($item->employee->fh_gender->m_name ?? ''),
+    //             'Aadhaar No'                            => (string) ($item->employee->emp_aadhaar_no ?? ''),
+    //             'DOB'                                   => $item->employee->emp_dob
+    //                 ? Carbon::parse($item->employee->emp_dob)->format('d M, Y')
+    //                 : '',
+    //             'DOJ'                                   => $item->employee->emp_date_of_joining
+    //                 ? Carbon::parse($item->employee->emp_date_of_joining)->format('d M, Y')
+    //                 : '',
+    //             'DOL'                                   => '',
+    //             'Last Working Date'                     => $item->employee->emp_last_working_date
+    //                 ? Carbon::parse($item->employee->emp_last_working_date)->format('d M, Y')
+    //                 : '',
+    //             'Department'                            => (string) ($item->employee->fh_department->d_name ?? ''),
+    //             'Designation'                           => (string) ($item->employee->fh_designation->dg_name ?? ''),
+    //             'Days'                                  => number_format($item->ps_total_month_working_days ?? 0, 2, '.', ''),
+    //             'Arrear Days'                           => '0.00',
+    //             'Amount on Which ESI Deducted'          => number_format($monthlyGross, 2, '.', ''),
+    //             'Arrear Amount on Which ESI Deducted'   => '0.00',
+    //             'ESI'                                   => number_format($employeeEsic, 2, '.', ''),
+    //             'Arrear ESI'                            => '0.00',
+    //             'Employer Contribution'                 => number_format($employerEsic, 2, '.', ''),
+    //             'Arrear Employer Contribution'          => '0.00',
+    //             'Total'                                 => number_format($employeeEsic + $employerEsic, 2, '.', ''),
+    //             'Arrear Total'                          => '0.00',
+    //         ];
+    //         // Force all to string
+    //         return collect($row)->map('strval')->all();
+    //     });
+    //     /* ------------------------------------------------------------------ */
+    //     /* 6. Export – Full styling, auto-size, grand total, legend          */
+    //     /* ------------------------------------------------------------------ */
+    //     $user        = Auth::user();
+    //     $businessName = $user->fh_business->b_name ?? 'Business';
+    //     $monthName   = optional(PayrollPeriod::find($this->selectedPayrollPeriodId))->pp_name ?? 'Month';
+    //     return Excel::download(new class(
+    //         $processedSalary,
+    //         $businessName,
+    //         $monthName,
+    //         $basicInfoColumns
+    //     ) implements FromCollection, WithHeadings, WithEvents {
+    //         use Exportable;
+    //         protected $data;
+    //         protected $businessName;
+    //         protected $monthName;
+    //         protected $basicInfoColumns;
+    //         protected $columnHeaders;
+    //         public function __construct($data, $businessName, $monthName, $basicInfoColumns)
+    //         {
+    //             $this->data             = $data;
+    //             $this->businessName     = $businessName;
+    //             $this->monthName        = $monthName;
+    //             $this->basicInfoColumns = $basicInfoColumns;
+    //             $this->columnHeaders    = $basicInfoColumns;
+    //         }
+    //         public function collection()
+    //         {
+    //             $rows = $this->data;
+    //             // Grand Total Row
+    //             $grand = collect($this->columnHeaders)->mapWithKeys(function ($col) use ($rows) {
+    //                 if (in_array($col, [
+    //                     'S#',
+    //                     'Emp Code',
+    //                     'ESI No.',
+    //                     'Employee Name',
+    //                     'Gender',
+    //                     'Aadhaar No',
+    //                     'DOB',
+    //                     'DOJ',
+    //                     'DOL',
+    //                     'Last Working Date',
+    //                     'Department',
+    //                     'Designation'
+    //                 ])) {
+    //                     return [$col => $col === 'S#' ? 'Grand Totals' : ''];
+    //                 }
+    //                 $sum = $rows->sum(fn($r) => floatval(str_replace(',', '', $r[$col] ?? '0')));
+    //                 return [$col => $sum > 0 ? number_format($sum, 2, '.', '') : ''];
+    //             })->all();
+    //             $rows->push($grand);
+    //             return $rows;
+    //         }
+    //         public function headings(): array
+    //         {
+    //             return [
+    //                 [$this->businessName],
+    //                 ['ESI REPORT FOR THE MONTH OF ' . strtoupper($this->monthName)],
+    //                 ['Printed on: ' . Carbon::now()->format('d-M-Y h:i A T')],
+    //                 // Group Row (merged in AfterSheet)
+    //                 array_fill(0, count($this->columnHeaders), ''),
+    //                 // Clean Column Headers
+    //                 $this->columnHeaders,
+    //             ];
+    //         }
+    //         public function registerEvents(): array
+    //         {
+    //             return [
+    //                 AfterSheet::class => function (AfterSheet $event) {
+    //                     $sheet      = $event->sheet->getDelegate();
+    //                     $highestCol = $sheet->getHighestColumn();
+    //                     $highestRow = $sheet->getHighestRow();
+    //                     // Top 3 rows
+    //                     foreach (range(1, 3) as $r) {
+    //                         $sheet->mergeCells("A{$r}:{$highestCol}{$r}");
+    //                         $sheet->getStyle("A{$r}")
+    //                             ->getFont()->setBold(true)->setSize(11);
+    //                         $sheet->getStyle("A{$r}")
+    //                             ->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+    //                     }
+    //                     $sheet->setCellValue('A1', $this->businessName);
+    //                     $sheet->setCellValue('A2', 'ESI REPORT FOR THE MONTH OF ' . strtoupper($this->monthName));
+    //                     // Header styling (rows 4-5)
+    //                     $sheet->getStyle("A5:{$highestCol}5")
+    //                         ->getFill()->setFillType(Fill::FILL_SOLID)
+    //                         ->getStartColor()->setRGB('263871');
+    //                     $sheet->getStyle("A5:{$highestCol}5")
+    //                         ->getFont()->setBold(true)->setSize(10)->getColor()->setRGB('FFFFFF');
+    //                     $sheet->getStyle("A5:{$highestCol}5")
+    //                         ->getAlignment()
+    //                         ->setHorizontal(Alignment::HORIZONTAL_CENTER)
+    //                         ->setVertical(Alignment::VERTICAL_CENTER)
+    //                         ->setWrapText(true);
+    //                     $sheet->setShowGridlines(false);
+    //                     // Merge group row
+    //                     $basicCount = count($this->basicInfoColumns);
+    //                     if ($basicCount > 1) {
+    //                         $start = Coordinate::stringFromColumnIndex(1);
+    //                         $end   = Coordinate::stringFromColumnIndex($basicCount);
+    //                         $sheet->mergeCells("{$start}4:{$end}4");
+    //                     }
+    //                     // Data rows
+    //                     $dataRange = "A6:{$highestCol}{$highestRow}";
+    //                     $sheet->getStyle($dataRange)
+    //                         ->getAlignment()
+    //                         ->setHorizontal(Alignment::HORIZONTAL_CENTER)
+    //                         ->setWrapText(true);
+    //                     $sheet->getStyle($dataRange)->getFont()->setSize(8);
+    //                     for ($r = 6; $r <= $highestRow; $r++) {
+    //                         $sheet->getRowDimension($r)->setRowHeight(25);
+    //                     }
+    //                     // Borders
+    //                     $sheet->getStyle("A5:{$highestCol}{$highestRow}")
+    //                         ->getBorders()
+    //                         ->getAllBorders()
+    //                         ->setBorderStyle(Border::BORDER_THIN)
+    //                         ->getColor()->setRGB('D3D3D3');
+    //                     // Currency format (still text)
+    //                     $moneyCols = [
+    //                         'Days',
+    //                         'Arrear Days',
+    //                         'Amount on Which ESI Deducted',
+    //                         'Arrear Amount on Which ESI Deducted',
+    //                         'ESI',
+    //                         'Arrear ESI',
+    //                         'Employer Contribution',
+    //                         'Arrear Employer Contribution',
+    //                         'Total',
+    //                         'Arrear Total'
+    //                     ];
+    //                     foreach ($moneyCols as $col) {
+    //                         $idx = array_search($col, $this->columnHeaders);
+    //                         if ($idx !== false) {
+    //                             $letter = Coordinate::stringFromColumnIndex($idx + 1);
+    //                             $sheet->getStyle("{$letter}6:{$letter}{$highestRow}")
+    //                                 ->getNumberFormat()
+    //                                 ->setFormatCode('#,##0.00');
+    //                         }
+    //                     }
+    //                     // Alternating colors
+    //                     $numRows = $this->data->count();
+    //                     for ($i = 0; $i < $numRows; $i++) {
+    //                         $row = 6 + $i;
+    //                         $color = $i % 2 === 0 ? 'F5F5F5' : 'FFFFFF';
+    //                         $sheet->getStyle("A{$row}:{$highestCol}{$row}")
+    //                             ->getFill()
+    //                             ->setFillType(Fill::FILL_SOLID)
+    //                             ->getStartColor()->setRGB($color);
+    //                     }
+    //                     // Grand total
+    //                     $grandRow = 6 + $numRows;
+    //                     $sheet->getStyle("A{$grandRow}:{$highestCol}{$grandRow}")
+    //                         ->getFont()->setBold(true)->setSize(9);
+    //                     $sheet->getStyle("A{$grandRow}:{$highestCol}{$grandRow}")
+    //                         ->getFill()
+    //                         ->setFillType(Fill::FILL_SOLID)
+    //                         ->getStartColor()->setRGB('FFD9D9D9');
+    //                     $sheet->getStyle("A{$grandRow}")
+    //                         ->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+    //                     // Row heights
+    //                     foreach (range(1, 3) as $r) $sheet->getRowDimension($r)->setRowHeight(20);
+    //                     $sheet->getRowDimension(4)->setRowHeight(15);
+    //                     $sheet->getRowDimension(5)->setRowHeight(25);
+    //                     $sheet->freezePane('A6');
+    //                 },
+    //             ];
+    //         }
+    //     }, 'ESIC_Report_' . $monthName . '.xlsx');
+    // }
+
+    public function generateReport()
+{
+    $this->validate([
+        'selectedFYId'          => 'required|exists:financial_years,fy_id',
+        'selectedPayrollPeriodId' => 'required|exists:payroll_periods,pp_id',
+    ], [
+        'selectedFYId.required'          => 'Financial year is required.',
+        'selectedPayrollPeriodId.required' => 'Payroll period is required.',
+    ]);
+
+    $payroll = PayrollPeriod::where('pp_b_id', $this->businessId)
+        ->where('pp_is_processed', 120)
+        ->find($this->selectedPayrollPeriodId);
+
+    if (! $payroll) {
+        $this->dispatch('show-alert', ['type' => 'error', 'message' => 'Invalid Payroll Period']);
+        return;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* 1. Base query */
+    /* ------------------------------------------------------------------ */
+    $query = ProcessedEmployeeSalary::with([
+        'employee.fh_gender',
+        'employee.fh_department',
+        'employee.fh_designation',
+        'employee.employeeProjects',
+    ])
+        ->where('ps_payroll_id', $this->selectedPayrollPeriodId)
+        ->when($this->employeeStatusId, fn($q) => $q->whereHas('employee', fn($sq) => $sq->where('emp_status', $this->employeeStatusId)))
+        ->when($this->selectedEmployeeId, fn($q) => $q->where('ps_emp_id', $this->selectedEmployeeId));
+
+    $processedSalary = $query->get();
+
+    if ($processedSalary->isEmpty()) {
+        $this->dispatch('show-alert', ['type' => 'error', 'message' => 'No records found for the selected criteria.']);
+        return;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* 2. Pre-load data */
+    /* ------------------------------------------------------------------ */
+    $psIds   = $processedSalary->pluck('ps_id');
+    $empIds  = $processedSalary->pluck('ps_emp_id');
+
+    $allEarnings = ProcessedSalaryEarning::whereIn('ps_id', $psIds)
+        ->get()
+        ->groupBy('ps_id')
+        ->map(fn($g) => $g->pluck('ps_e_amount', 'ps_earning_type'));
+
+    $allDeductions = ProcessedSalaryDeduction::whereIn('ps_id', $psIds)
+        ->get()
+        ->groupBy('ps_id')
+        ->map(fn($g) => $g->pluck('ps_d_amount', 'ps_deduction_type'));
+
+    $allSalary = SalaryEmployeeSalary::where('es_b_id', $this->businessId)
+        ->whereIn('es_emp_id', $empIds)
+        ->with('salary_earnings.fh_salary_earning_type')
+        ->get()
+        ->groupBy('es_emp_id');
+
+    $allSalaryDed = SalaryEmployeeDeductions::with('fh_salary_deduction_type')
+        ->whereIn('es_d_emp_id', $empIds)
+        ->get()
+        ->groupBy('es_d_emp_id')
+        ->map(fn($g) => $g->pluck('es_d_amount', 'fh_salary_deduction_type.m_name'));
+
+    $employeeSalary = SalaryEmployeeSalary::with('fh_employee')
+        ->where('es_b_id', $this->businessId)
+        ->whereIn('es_emp_id', $empIds)
+        ->get();
+
+    /* ------------------------------------------------------------------ */
+    /* 3. ESI filter */
+    /* ------------------------------------------------------------------ */
+    $threshold = DB::table('statutory_deductions')
+        ->where('std_b_id', $this->businessId)
+        ->where('std_deduction_type_id', 352)
+        ->value('std_threshold');
+
+    $esicDeduction = StatutoryDeduction::where('std_b_id', $this->businessId)->where('std_deduction_type_id', 352)->first();
+    $employeeContriRate = $esicDeduction->std_employee_contri_rate_amount ?? 0;
+    $employerContriRate = $esicDeduction->std_employer_contri_rate_amount ?? 0;
+
+
+    $processedSalary = $processedSalary
+        ->filter(function ($item) use ($threshold, $employeeSalary) {
+            if (
+                empty($item->employee) ||
+                $item->employee->emp_esic_limit == 121 ||
+                empty($item->employee->emp_esic_no)
+            ) {
+                return false;
+            }
+            $gross = $employeeSalary->where('es_emp_id', $item->ps_emp_id)->first()->es_monthly_gross ?? null;
+            // return $gross !== null && $gross < $threshold;
+            return $gross !== null;
+
+        })
+        ->values();
+
+    if ($processedSalary->isEmpty()) {
+        $this->dispatch('show-alert', ['type' => 'error', 'message' => 'No ESI-eligible employees found.']);
+        return;
+    } 
+
+    /* ------------------------------------------------------------------ */
+    /* 4. Columns */
+    /* ------------------------------------------------------------------ */
+    $basicInfoColumns = [
+        'S#', 'Emp Code', 'ESI No.', 'Employee Name', 'Gender',
+        'Aadhaar No', 'DOB', 'DOJ', 'DOL', 'Last Working Date',
+        'Department', 'Designation',
+        'Days', 'Arrear Days',
+        'Amount on Which ESI Deducted', 'Arrear Amount on Which ESI Deducted',
+        'ESI', 'Arrear ESI',
+        'Employer Contribution', 'Arrear Employer Contribution',
+        'Total', 'Arrear Total'
+    ];
+     
+
+    /* ------------------------------------------------------------------ */
+    /* 5. Transform */
+    /* ------------------------------------------------------------------ */
+    $processedSalary = $processedSalary->transform(function ($item, $key) use ($employeeSalary,$employeeContriRate,$employerContriRate,$threshold) {
+        $monthlyGross = $item->ps_monthly_gross ?? 0;
+        if ($monthlyGross < $threshold) {
+            $calculationBase = $monthlyGross; 
+        } else {
+            $calculationBase = $threshold; 
+        }
+        $employeeEsic = $calculationBase * $employeeContriRate / 100;
+        $employerEsic = $calculationBase * $employerContriRate / 100;
+
+        
+
+        $row = [
+            'S#'                                 => (string) ($key + 1),
+            'Emp Code'                           => (string) ($item->employee->emp_code ?? '-'),
+            'ESI No.'                            => (string) ($item->employee->emp_esic_no ?? '-'),
+            'Employee Name'                      => (string) ($item->employee->emp_full_name ?? '-'),
+            'Gender'                             => (string) ($item->employee->fh_gender->m_name ?? '-'),
+            'Aadhaar No'                         => (string) ($item->employee->emp_aadhaar_no ?? '-'),
+            'DOB'                                => $item->employee->emp_dob ? Carbon::parse($item->employee->emp_dob)->format('d M, Y') : '-',
+            'DOJ'                                => $item->employee->emp_date_of_joining ? Carbon::parse($item->employee->emp_date_of_joining)->format('d M, Y') : '-',
+            'DOL'                                => '-',
+            'Last Working Date'                  => $item->employee->emp_last_working_date ? Carbon::parse($item->employee->emp_last_working_date)->format('d M, Y') : '-',
+            'Department'                         => (string) ($item->employee->fh_department->d_name ?? '-'),
+            'Designation'                        => (string) ($item->employee->fh_designation->dg_name ?? '-'),
+            'Days'                               => number_format($item->ps_total_month_working_days ?? 0, 2, '.', ''),
+            'Arrear Days'                        => '0.00',
+            'Amount on Which ESI Deducted'       => number_format($calculationBase, 2, '.', ''),
+            'Arrear Amount on Which ESI Deducted'=> '0.00',
+            'ESI'                                => number_format($employeeEsic, 2, '.', ''),
+            'Arrear ESI'                         => '0.00',
+            'Employer Contribution'              => number_format($employerEsic, 2, '.', ''),
+            'Arrear Employer Contribution'       => '0.00',
+            'Total'                              => number_format($employeeEsic + $employerEsic, 2, '.', ''),
+            'Arrear Total'                       => '0.00',
+        ];
+
+        return collect($row)->map('strval')->all();
+    });
+
+    /* ------------------------------------------------------------------ */
+    /* 6. Export – REMOVED ShouldAutoSize */
+    /* ------------------------------------------------------------------ */
+    $user        = Auth::user();
+    $businessName = $user->fh_business->b_name ?? 'Business';
+    $monthName   = optional(PayrollPeriod::find($this->selectedPayrollPeriodId))->pp_name ?? 'Month';
+
+    return Excel::download(new class(
+        $processedSalary,
+        $businessName,
+        $monthName,
+        $basicInfoColumns
+    ) implements FromCollection, WithHeadings, WithEvents {
+        use Exportable;
+
+        protected $data;
+        protected $businessName;
+        protected $monthName;
+        protected $basicInfoColumns;
+
+        public function __construct($data, $businessName, $monthName, $basicInfoColumns)
+        {
+            $this->data             = $data;
+            $this->businessName     = $businessName;
+            $this->monthName        = $monthName;
+            $this->basicInfoColumns = $basicInfoColumns;
+        }
+
+        public function collection()
+        {
+            $rows = $this->data;
+
+            $grand = collect($this->basicInfoColumns)->mapWithKeys(function ($col) use ($rows) {
+                if (in_array($col, ['S#', 'Emp Code', 'ESI No.', 'Employee Name', 'Gender',
+                    'Aadhaar No', 'DOB', 'DOJ', 'DOL', 'Last Working Date',
+                    'Department', 'Designation'])) {
+                    return [$col => $col === 'S#' ? 'Grand Totals' : ''];
+                }
+                $sum = $rows->sum(fn($r) => floatval(str_replace(',', '', $r[$col] ?? '0')));
+                return [$col => $sum > 0 ? number_format($sum, 2, '.', '') : ''];
+            })->all();
+
+            $rows->push($grand);
+            return $rows;
+        }
+
+        public function headings(): array
+        {
+            return [
+                [$this->businessName],
+                ['ESI REPORT FOR THE MONTH OF ' . strtoupper($this->monthName)],
+                ['Printed on: ' . Carbon::now()->format('d-M-Y h:i A T')],
+                array_fill(0, count($this->basicInfoColumns), ''),
+                $this->basicInfoColumns,
+            ];
+        }
+
+        public function registerEvents(): array
+        {
+            return [
+                AfterSheet::class => function (AfterSheet $event) {
+                    $sheet = $event->sheet->getDelegate();
+                    $highestRow = $sheet->getHighestRow();
+                    $dataCols = count($this->basicInfoColumns);
+                    $lastCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($dataCols);
+                    $dataRange = "A6:{$lastCol}{$highestRow}";
+
+                    /* ==================== COLUMN WIDTHS ==================== */
+                    foreach (range(1, $dataCols) as $i) {
+                        $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i);
+                        $header = $sheet->getCell("{$col}5")->getValue();
+                        $width = in_array($header, ['S#', 'Emp Code']) ? 7 : 13;
+                        $sheet->getColumnDimension($col)->setWidth($width);
+                    }
+
+                    /* ==================== ROW HEIGHTS ==================== */
+                    for ($r = 6; $r <= $highestRow; $r++) {
+                        $sheet->getRowDimension($r)->setRowHeight(25);
+                    }
+
+                    /* ==================== TEXT WRAP ==================== */
+                    $sheet->getStyle($dataRange)->getAlignment()->setWrapText(true);
+                    $sheet->getStyle("A5:{$lastCol}5")->getAlignment()->setWrapText(true);
+
+                    /* ==================== TITLE (1-3) ==================== */
+                    $highestCol = $sheet->getHighestColumn();
+                    foreach (range(1, 3) as $r) {
+                        $sheet->mergeCells("A{$r}:{$highestCol}{$r}");
+                        $sheet->getStyle("A{$r}")->getFont()->setBold(true)->setSize(11);
+                        $sheet->getStyle("A{$r}")->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT);
+                    }
+                    $sheet->setCellValue('A1', $this->businessName);
+                    $sheet->setCellValue('A2', 'ESI REPORT FOR THE MONTH OF ' . strtoupper($this->monthName));
+                    $sheet->setCellValue('A3', 'Printed on: ' . Carbon::now()->format('d-M-Y h:i A T'));
+
+                    /* ==================== HEADER (5) ==================== */
+                    $sheet->getStyle("A5:{$lastCol}5")
+                        ->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                        ->getStartColor()->setRGB('263871');
+                    $sheet->getStyle("A5:{$lastCol}5")
+                        ->getFont()->setBold(true)->setSize(10)->getColor()->setRGB('FFFFFF');
+                    $sheet->getStyle("A5:{$lastCol}5")
+                        ->getAlignment()
+                        ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER)
+                        ->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+                    $sheet->setShowGridlines(false);
+
+                    /* ==================== MERGE ROW 4 ==================== */
+                    if ($dataCols > 1) {
+                        $start = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(1);
+                        $end   = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($dataCols);
+                        $sheet->mergeCells("{$start}4:{$end}4");
+                    }
+
+                    /* ==================== DATA STYLE ==================== */
+                    $sheet->getStyle($dataRange)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                    $sheet->getStyle($dataRange)->getFont()->setSize(8);
+
+                    /* ==================== BORDERS ==================== */
+                    $sheet->getStyle("A5:{$lastCol}{$highestRow}")
+                        ->getBorders()
+                        ->getAllBorders()
+                        ->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN)
+                        ->getColor()->setRGB('D3D3D3');
+
+                    /* ==================== CURRENCY FORMAT ==================== */
+                    $moneyCols = ['Days','Arrear Days','Amount on Which ESI Deducted','Arrear Amount on Which ESI Deducted',
+                                  'ESI','Arrear ESI','Employer Contribution','Arrear Employer Contribution',
+                                  'Total','Arrear Total'];
+                    foreach ($moneyCols as $col) {
+                        $idx = array_search($col, $this->basicInfoColumns);
+                        if ($idx !== false) {
+                            $letter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($idx + 1);
+                            $sheet->getStyle("{$letter}6:{$letter}{$highestRow}")
+                                  ->getNumberFormat()
+                                  ->setFormatCode('#,##0.00');
+                        }
+                    }
+
+                    /* ==================== ALTERNATING ROWS ==================== */
+                    $numRows = $this->data->count();
+                    for ($i = 0; $i < $numRows; $i++) {
+                        $row = 6 + $i;
+                        $color = $i % 2 === 0 ? 'F5F5F5' : 'FFFFFF';
+                        $sheet->getStyle("A{$row}:{$lastCol}{$row}")
+                              ->getFill()
+                              ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                              ->getStartColor()->setRGB($color);
+                    }
+
+                    /* ==================== GRAND TOTAL ==================== */
+                    $grandRow = 6 + $numRows;
+                    $sheet->getStyle("A{$grandRow}:{$lastCol}{$grandRow}")
+                          ->getFont()->setBold(true)->setSize(9);
+                    $sheet->getStyle("A{$grandRow}:{$lastCol}{$grandRow}")
+                          ->getFill()
+                          ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                          ->getStartColor()->setRGB('FFD9D9D9');
+                    $sheet->getStyle("A{$grandRow}")->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT);
+
+                    /* ==================== ROW HEIGHTS ==================== */
+                    foreach (range(1, 3) as $r) $sheet->getRowDimension($r)->setRowHeight(20);
+                    $sheet->getRowDimension(4)->setRowHeight(15);
+                    $sheet->getRowDimension(5)->setRowHeight(30);
+
+                    $sheet->freezePane('A6');
+                },
+            ];
+        }
+    }, 'ESIC_Report_' . $monthName . '.xlsx');
+}
+}

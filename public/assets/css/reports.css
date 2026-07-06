@@ -1,0 +1,790 @@
+/* ─── CSS tokens ─── */
+:root {
+    --ef-bg: #ffffff;
+    --ef-surface: #f8f9fb;
+    --ef-surface2: #f1f3f7;
+    --ef-border: #e2e6ee;
+    --ef-text: #1a1d2e;
+    --ef-muted: #6b7080;
+    --ef-accent: #1877f2;
+    --ef-accent2: #1877f2;
+    --ef-danger: #e05c5c;
+    --ef-success: #34d39a;
+    --ef-radius: 10px;
+    --ef-input-h: 32px;
+    --ef-font-sm: 12px;
+    --ef-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+    --ef-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.10);
+    --ef-badge-bg: rgba(79, 124, 255, 0.10);
+    --ef-badge-bdr: rgba(79, 124, 255, 0.28);
+    --ef-badge-text: #4f7cff;
+}
+
+[data-bs-theme="dark"],
+.dark-mode {
+    --ef-bg: #151636;
+    --ef-surface: #151636;
+    --ef-surface2: #151636;
+    --ef-border: rgba(255, 255, 255, 0.08);
+    --ef-text: #e8eaf0;
+    --ef-muted: #6b7080;
+    --ef-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    --ef-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.50);
+}
+
+/* ─── Panel ─── */
+.ef-panel {
+    background: var(--ef-bg);
+    border: 1px solid var(--ef-border);
+    border-radius: 20px;
+    padding: 36px 40px 32px;
+    box-shadow: var(--ef-shadow-lg), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.ef-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 28px;
+}
+
+.ef-panel-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ef-muted);
+}
+
+/* ─── Filter toggle button ─── */
+.ef-filter-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--ef-surface2);
+    border: 1px solid var(--ef-border);
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: var(--ef-muted);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color .2s, color .2s;
+    white-space: nowrap;
+}
+
+.ef-filter-toggle-btn:hover {
+    border-color: var(--ef-accent);
+    color: var(--ef-accent);
+}
+
+.ef-filter-toggle-btn svg {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+}
+
+/* ─── Filter panel ─── */
+.ef-filter-panel-wrap {
+    position: relative;
+}
+
+.ef-filter-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    width: 232px;
+    z-index: 1055;
+    background: var(--ef-bg);
+    border: 1px solid var(--ef-border);
+    border-radius: var(--ef-radius);
+    box-shadow: var(--ef-shadow-lg);
+    padding: 14px 16px;
+    animation: efFadeDown .18s ease both;
+}
+
+@keyframes efFadeDown {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.ef-fp-heading {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--ef-muted);
+    margin-bottom: 10px;
+}
+
+/* ─── Switch rows ─── */
+.ef-switch-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--ef-border);
+}
+
+.ef-switch-row:last-child {
+    border-bottom: none;
+}
+
+.ef-switch-row label {
+    font-size: 12px;
+    color: var(--ef-text);
+    margin: 0;
+    cursor: pointer;
+}
+
+.form-check-input:checked {
+    background-color: var(--ef-accent);
+    border-color: var(--ef-accent);
+}
+
+/* ─── Grid shrink (when filter panel open) ─── */
+.ef-fields-grid {
+    transition: padding-right 0.3s ease;
+    padding-right: 0;
+}
+
+.ef-fields-grid.ef-grid-shrink {
+    padding-right: 252px;
+}
+
+/* ─── Inputs / selects ─── */
+.ef-control {
+    width: 100%;
+    height: var(--ef-input-h);
+    background: var(--ef-surface2);
+    border: 1px solid var(--ef-border);
+    border-radius: var(--ef-radius);
+    padding: 0 34px 0 12px;
+    color: var(--ef-text);
+    font-size: var(--ef-font-sm);
+    outline: none;
+    transition: border-color .2s, box-shadow .2s;
+    appearance: none;
+}
+
+.ef-control::placeholder {
+    color: var(--ef-muted);
+}
+
+.ef-control:focus {
+    border-color: var(--ef-accent);
+    box-shadow: 0 0 0 3px rgba(79, 124, 255, .13);
+}
+
+.ef-input-wrap {
+    position: relative;
+}
+
+.ef-input-wrap .ef-icon {
+    position: absolute;
+    right: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--ef-muted);
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+}
+
+.ef-input-wrap .ef-icon svg {
+    width: 13px;
+    height: 13px;
+}
+
+/* ─── Field label ─── */
+.ef-field-label {
+    display: block;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--ef-muted);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+/* ─── Results dropdown ─── */
+.ef-results {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    width: 100%;
+    z-index: 1060;
+    background: var(--ef-bg);
+    border: 1px solid var(--ef-border);
+    border-radius: var(--ef-radius);
+    box-shadow: var(--ef-shadow-lg);
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 4px 0;
+    list-style: none;
+    margin: 0;
+}
+
+.ef-results li {
+    font-size: var(--ef-font-sm);
+    padding: 7px 14px;
+    cursor: pointer;
+    color: var(--ef-text);
+    transition: background .15s;
+}
+
+.ef-results li:hover {
+    background: var(--ef-surface2);
+}
+
+.ef-results li.ef-no-result {
+    color: var(--ef-muted);
+    cursor: default;
+}
+
+/* ─── Badge ─── */
+.ef-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--ef-badge-bg);
+    border: 1px solid var(--ef-badge-bdr);
+    color: var(--ef-badge-text);
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 20px;
+    margin-top: 5px;
+}
+
+.ef-badge-remove {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    padding: 0;
+    opacity: .7;
+    line-height: 1;
+    transition: opacity .2s;
+}
+
+.ef-badge-remove:hover {
+    opacity: 1;
+}
+
+/* ─── Divider ─── */
+.ef-divider {
+    height: 1px;
+    background: var(--ef-border);
+    margin: 8px 0;
+}
+
+/* ─── Additional Details toggle ─── */
+.ef-additional {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: var(--ef-muted);
+    font-size: 12.5px;
+    font-weight: 500;
+    user-select: none;
+    transition: color .2s;
+    padding: 4px 0;
+}
+
+.ef-additional:hover {
+    color: var(--ef-text);
+}
+
+.ef-additional .ef-chevron {
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid currentColor;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: transform .3s;
+}
+
+.ef-additional.open .ef-chevron {
+    transform: rotate(180deg);
+}
+
+/* ─── Accordion body ─── */
+.ef-acc-body {
+    background: var(--ef-surface);
+    border: 1px solid var(--ef-border);
+    border-top: none;
+    border-radius: 0 0 var(--ef-radius) var(--ef-radius);
+    padding: 14px 16px;
+}
+
+.ef-acc-body .form-check-label {
+    font-size: var(--ef-font-sm);
+    color: var(--ef-text);
+}
+
+/* ─── Sort row ─── */
+.ef-sort-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.ef-sort-label {
+    font-size: var(--ef-font-sm);
+    font-weight: 600;
+    color: var(--ef-muted);
+}
+
+.ef-sort-row .form-check-label {
+    font-size: var(--ef-font-sm);
+    color: var(--ef-text);
+}
+
+/* ─── Buttons ─── */
+.ef-btn-export {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(135deg, var(--ef-accent), var(--ef-accent2));
+    border: none;
+    color: #fff;
+    font-size: 13.5px;
+    font-weight: 500;
+    padding: 11px 24px;
+    border-radius: var(--ef-radius);
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(79, 124, 255, .30);
+    transition: opacity .2s, transform .15s, box-shadow .2s;
+}
+
+.ef-btn-export:hover {
+    opacity: .92;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 28px rgba(79, 124, 255, .40);
+}
+
+.ef-btn-export:active {
+    transform: scale(.98);
+}
+
+.ef-btn-export:disabled {
+    opacity: .6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.ef-btn-export svg {
+    width: 15px;
+    height: 15px;
+}
+
+.ef-btn-reset {
+    background: none;
+    border: none;
+    color: var(--ef-muted);
+    font-size: 13px;
+    cursor: pointer;
+    padding: 0;
+    transition: color .2s;
+}
+
+.ef-btn-reset:hover {
+    color: var(--ef-text);
+}
+
+.ef-filter-clear-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+    border: 1px solid var(--ef-border);
+    border-radius: 8px;
+    background: var(--ef-surface2);
+    color: var(--ef-muted);
+    cursor: pointer;
+    transition: all .2s;
+}
+
+.ef-filter-clear-btn:hover {
+    background: #fef2f2;
+    border-color: #fca5a5;
+    color: #ef4444;
+}
+
+/* ─── Alert ─── */
+.ef-alert {
+    border-radius: var(--ef-radius);
+    font-size: var(--ef-font-sm);
+}
+
+.custom-close-button {
+    background: transparent;
+    border: none;
+    font-size: 1.25rem;
+    font-weight: bold;
+    color: inherit;
+    cursor: pointer;
+    padding: 0;
+    margin-left: 1rem;
+    transition: opacity .2s;
+}
+
+.custom-close-button:hover {
+    opacity: .6;
+}
+
+.custom-close-button::before {
+    content: '×';
+}
+
+/* ─── Progress overlay ─── */
+.ef-overlay {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ef-progress-card {
+    background: var(--ef-bg);
+    border: 1px solid var(--ef-border);
+    border-radius: 16px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+    width: 440px;
+    overflow: hidden;
+    position: relative;
+    animation: efSlideIn .3s ease both;
+}
+
+@keyframes efSlideIn {
+    from { opacity: 0; transform: translateY(-16px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes efSlideUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.ef-card-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--ef-surface2);
+    border: 1px solid var(--ef-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: var(--ef-muted);
+    cursor: pointer;
+    transition: all .2s;
+    z-index: 10;
+    line-height: 1;
+}
+
+.ef-card-close:hover {
+    background: var(--ef-surface);
+    color: var(--ef-danger);
+    transform: scale(1.1);
+}
+
+.ef-spinner {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    border: 3px solid var(--ef-border);
+    border-top-color: var(--ef-accent);
+    border-radius: 50%;
+    animation: efSpin 1s linear infinite;
+}
+
+@keyframes efSpin {
+    to { transform: rotate(360deg); }
+}
+
+.ef-progress-bar-track {
+    background: var(--ef-surface2);
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.ef-progress-bar-fill {
+    background: linear-gradient(90deg, var(--ef-accent), var(--ef-accent2));
+    height: 100%;
+    border-radius: 3px;
+    transition: width .5s ease;
+}
+
+/* ─── Steps ─── */
+.ef-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.ef-step:last-child {
+    margin-bottom: 0;
+}
+
+.ef-step-icon {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--ef-surface2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: var(--ef-muted);
+    transition: background .3s, color .3s;
+}
+
+.ef-step-icon.active    { background: var(--ef-accent);  color: #fff; }
+.ef-step-icon.completed { background: var(--ef-success); color: #fff; }
+
+.ef-step-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ef-text);
+}
+
+.ef-step-desc {
+    font-size: 11.5px;
+    color: var(--ef-muted);
+    margin-top: 1px;
+}
+
+/* ─── Cancel button ─── */
+.ef-cancel-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: var(--ef-danger);
+    border: none;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 10px 20px;
+    border-radius: var(--ef-radius);
+    cursor: pointer;
+    transition: opacity .2s, transform .15s;
+    margin-top: 16px;
+}
+
+.ef-cancel-btn:hover  { opacity: .9; transform: translateY(-1px); }
+.ef-cancel-btn:active { transform: scale(.98); }
+.ef-cancel-btn svg    { width: 13px; height: 13px; }
+
+.ef-cancel-note {
+    font-size: 11px;
+    color: var(--ef-muted);
+    text-align: center;
+    margin-top: 6px;
+}
+
+/* ─── Resume banner ─── */
+.ef-resume-banner {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 9998;
+    background: linear-gradient(135deg, var(--ef-accent), var(--ef-accent2));
+    color: #fff;
+    border-radius: var(--ef-radius);
+    padding: 12px 16px;
+    box-shadow: 0 4px 20px rgba(79, 124, 255, .35);
+    cursor: pointer;
+    max-width: 300px;
+    display: none;
+    animation: efSlideUp .3s ease both;
+}
+
+.ef-resume-banner.visible { display: block; }
+
+.ef-resume-banner-close {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, .75);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    transition: color .2s;
+}
+
+.ef-resume-banner-close:hover { color: #fff; }
+
+/* ─── Module multi-select ─── */
+.ef-multi-select-box {
+    width: 100%;
+    height: var(--ef-input-h);
+    background: var(--ef-surface2);
+    border: 1px solid var(--ef-border);
+    border-radius: var(--ef-radius);
+    padding: 0 12px;
+    color: var(--ef-text);
+    font-size: var(--ef-font-sm);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: border-color .2s, box-shadow .2s;
+    user-select: none;
+}
+
+.ef-multi-select-box:hover,
+.ef-multi-select-box.open {
+    border-color: var(--ef-accent);
+    box-shadow: 0 0 0 3px rgba(79, 124, 255, .13);
+}
+
+.ef-multi-select-box svg { width: 13px; height: 13px; color: var(--ef-muted); flex-shrink: 0; }
+
+.ef-multi-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    width: 100%;
+    z-index: 1060;
+    background: var(--ef-bg);
+    border: 1px solid var(--ef-border);
+    border-radius: var(--ef-radius);
+    box-shadow: var(--ef-shadow-lg);
+    max-height: 260px;
+    overflow-y: auto;
+    padding: 8px 0;
+}
+
+.ef-multi-dropdown .ef-multi-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-size: var(--ef-font-sm);
+    color: var(--ef-text);
+    transition: background .15s;
+}
+
+.ef-multi-dropdown .ef-multi-item:hover { background: var(--ef-surface2); }
+
+.ef-multi-dropdown .ef-multi-divider {
+    height: 1px;
+    background: var(--ef-border);
+    margin: 4px 0;
+}
+
+.ef-multi-count {
+    font-size: 11px;
+    color: var(--ef-muted);
+    margin-top: 4px;
+}
+
+/* ─── Select2 overrides ─── */
+
+/* Width fix */
+.select2-container { width: 100% !important; }
+
+/* Main visible box - force rounded corners */
+.select2-container--default .select2-selection--single {
+    height: var(--ef-input-h) !important;
+    background: var(--ef-surface2) !important;
+    border: 1px solid var(--ef-border) !important;
+    border-radius: var(--ef-radius) !important;
+    outline: none !important;
+}
+
+/* Text inside */
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: var(--ef-input-h) !important;
+    color: var(--ef-text) !important;
+    font-size: var(--ef-font-sm) !important;
+    padding-left: 12px !important;
+    padding-right: 30px !important;
+    border-radius: var(--ef-radius) !important;
+}
+
+/* Placeholder */
+.select2-container--default .select2-selection--single .select2-selection__placeholder {
+    color: var(--ef-muted) !important;
+}
+
+/* Arrow */
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: var(--ef-input-h) !important;
+    top: 0 !important;
+    right: 6px !important;
+    border-radius: 0 var(--ef-radius) var(--ef-radius) 0 !important;
+}
+.select2-container--default .select2-selection--single .select2-selection__arrow b {
+    border-color: var(--ef-muted) transparent transparent !important;
+}
+
+/* Open / focus */
+.select2-container--default.select2-container--open .select2-selection--single,
+.select2-container--default.select2-container--focus .select2-selection--single {
+    border-color: var(--ef-accent) !important;
+    box-shadow: 0 0 0 3px rgba(79, 124, 255, .13) !important;
+    border-radius: var(--ef-radius) !important;
+    outline: none !important;
+}
+
+/* Dropdown panel */
+.select2-dropdown {
+    border: 1px solid var(--ef-border) !important;
+    border-radius: var(--ef-radius) !important;
+    box-shadow: var(--ef-shadow-lg) !important;
+    font-size: var(--ef-font-sm) !important;
+    overflow: hidden !important;
+}
+
+/* Options */
+.select2-container--default .select2-results__option {
+    font-size: var(--ef-font-sm) !important;
+    color: var(--ef-text) !important;
+    padding: 7px 14px !important;
+}
+.select2-container--default .select2-results__option--highlighted {
+    background-color: var(--ef-surface2) !important;
+    color: var(--ef-text) !important;
+}
+
+/* Search box */
+.select2-search--dropdown .select2-search__field {
+    border: 1px solid var(--ef-border) !important;
+    border-radius: 6px !important;
+    font-size: var(--ef-font-sm) !important;
+    padding: 4px 8px !important;
+    outline: none !important;
+}
+
+/* ─── Daterangepicker overrides ─── */
+.daterangepicker                          { border-radius: var(--ef-radius) !important; border: 1px solid var(--ef-border) !important; box-shadow: var(--ef-shadow-lg) !important; font-size: var(--ef-font-sm) !important; }
+.daterangepicker td.active,
+.daterangepicker td.active:hover          { background-color: var(--ef-accent) !important; }
+.daterangepicker .ranges li.active        { background-color: var(--ef-accent) !important; }
+.daterangepicker .drp-buttons .btn        { border-radius: var(--ef-radius); font-size: var(--ef-font-sm); }
+.daterangepicker .drp-buttons .applyBtn   { background: var(--ef-accent); border-color: var(--ef-accent); }

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en-US">
+
+<head>
+    <meta content="text/html; charset=utf-8" http-equiv="Content-Type" />
+    <title>FixHR Approval Mail</title>
+    <meta name="description" content="Reset Password Email Template.">
+    <style type="text/css">
+        body {
+            margin: 0;
+            background-color: #f2f3f8;
+        }
+        table {
+            width: 100%;
+            background-color: #f2f3f8;
+        }
+        table.inner {
+            width: 650px;
+            margin: 0 auto;
+            background-color: #fff;
+            border-radius: 8px;
+        }
+        .content {
+            font-family: 'Open Sans', Helvetica, Arial, sans-serif;
+            font-size: 25px;
+        }
+        .header {
+            text-align: center;
+            padding: 30px 0;
+        }
+        .header img {
+            width: 200px;
+        }
+        .main {
+            padding: 20px 30px;
+        }
+        .footer {
+            text-align: center;
+            color: #999;
+            font-size: 70%;
+            padding: 20px 0;
+        }
+        a {
+            color: #8d6cd1;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline !important;
+        }
+    </style>
+</head>
+
+<body>
+    <table cellspacing="0" border="0" cellpadding="0">
+        <tr>
+            <td align="center">
+                <table class="inner">
+                    <tr>
+                        <td class="header">
+                            <img src="http://dev.fixhr.app/assets/logo/logo.png" alt="FixHR Logo">
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="main content">
+                            <p>Dear {{ $data['name'] }},</p>
+                            <p>{{ $data['message'] }}:
+                                @isset($data['url'])
+                                <a href="{{ $data['url'] }}">View</a>
+                                @endisset
+                            </p>
+                            <p>This is an auto-generated email. Do not reply to this email.</p>
+                            <p>Thank you</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="footer">
+                            <p>Powered By Fixing Dots</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+
+</html>

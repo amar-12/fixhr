@@ -1,0 +1,145 @@
+<?php
+
+namespace App\Exports\TaDa;
+
+use Maatwebsite\Excel\Concerns\FromArray;
+use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Concerns\ShouldAutoSize;
+use Maatwebsite\Excel\Concerns\WithEvents;
+use Maatwebsite\Excel\Concerns\WithStyles;
+use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+
+class AttendanceGeofenceReport implements FromArray, WithHeadings, ShouldAutoSize, WithEvents
+{
+    protected $rows;
+    protected $from;
+    protected $to;
+
+    public function __construct(array $rows, $from = null, $to = null)
+    {
+        $this->rows = $rows;
+        $this->from = $from;
+        $this->to   = $to;
+    }
+
+    /**
+     * Three header/info rows above the column headings, then the data.
+     * FromArray lets us fully control row 1-3 plus data, since
+     * WithHeadings only controls the row right above the data.
+     */
+    public function array(): array
+    {
+        return collect($this->rows)->values()->map(function ($r, $i) {
+            return [
+                $i + 1,
+                $r['Employee Code'] ?? '---',
+                $r['Employee Name'] ?? '---',
+                $r['Branch'] ?? '---',
+                $r['Department'] ?? '---',
+                $r['Designation'] ?? '---',
+                $r['Attendance'] ?? '---',
+                $r['Check In'] ?? '---',
+                $r['Check Out'] ?? '---',
+                $r['Late (mins)'] ?? '---',
+                $r['Early Leaving (mins)'] ?? '---',
+                $r['Worked Hours'] ?? '---',
+                $r['Travel Type'] ?? '---',
+                $r['Travel Id'] ?? '---',
+                $r['Trip Name'] ?? '---',
+                $r['Purpose'] ?? '---',
+                $r['Remark'] ?? '---',
+                $r['Travel Start Date'] ?? '---',
+                $r['Travel Start Time'] ?? '---',
+                $r['Travel End Date'] ?? '---',
+                $r['Travel End Time'] ?? '---',
+                $r['Applied Date'] ?? '---',
+                $r['Applied Status'] ?? '---',
+            ];
+        })->toArray();
+    }
+
+    public function headings(): array
+    {
+        return [
+            'S. No.',
+            'Employee Code',
+            'Employee Name',
+            'Branch',
+            'Department',
+            'Designation',
+            'Attendance',
+            'Check In',
+            'Check Out',
+            'Late (mins)',
+            'Early Leaving (mins)',
+            'Worked Hours',
+            'Travel Type',
+            'Travel Id',
+            'Trip Name',
+            'Purpose',
+            'Remark',
+            'Travel Start Date',
+            'Travel Start Time',
+            'Travel End Date',
+            'Travel End Time',
+            'Applied Date',
+            'Applied Status',
+        ];
+    }
+
+    /**
+     * Insert the 3 title rows above the headings (which Excel will
+     * already place at row 4 because of WithHeadings), then style them.
+     */
+    public function registerEvents(): array
+    {
+        return [
+            AfterSheet::class => function (AfterSheet $event) {
+                $sheet = $event->sheet->getDelegate();
+
+                // Determine the last column BEFORE inserting rows, based on the
+                // heading count, so width is never driven by the merged title text.
+                $columnCount = count($this->headings());
+                $lastColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($columnCount);
+
+                // Push everything down by inserting 3 rows at the top.
+                $sheet->insertNewRowBefore(1, 3);
+
+                $rangeLabel = ($this->from && $this->to)
+                    ? " ({$this->from} to {$this->to})"
+                    : '';
+
+                $sheet->setCellValue('A1', 'TADA Report');
+                $sheet->setCellValue('A2', now()->format('d-m-Y'));
+                $sheet->setCellValue('A3', 'Report Type: Attendance Travel Report' . $rangeLabel);
+
+                // Merge each title row across all data columns so the text acts as
+                // a banner instead of spilling into / widening column A ("S. No.").
+                $sheet->mergeCells("A1:{$lastColumnIndex}1");
+                $sheet->mergeCells("A2:{$lastColumnIndex}2");
+                $sheet->mergeCells("A3:{$lastColumnIndex}3");
+
+                $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(13);
+                $sheet->getStyle('A2')->getFont()->setBold(true);
+                $sheet->getStyle('A3')->getFont()->setBold(true);
+
+                $sheet->getStyle('A1:A3')->getAlignment()
+                    ->setHorizontal(Alignment::HORIZONTAL_LEFT)
+                    ->setVertical(Alignment::VERTICAL_CENTER);
+
+                // Bold + center the heading row (now row 4 after the insert)
+                $sheet->getStyle("A4:{$lastColumnIndex}4")->getFont()->setBold(true);
+                $sheet->getStyle("A4:{$lastColumnIndex}4")->getAlignment()
+                    ->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+                // Keep S. No. column narrow regardless of autosize, since the
+                // merged title text no longer lives in column A's width calculation.
+                $sheet->getColumnDimension('A')->setWidth(8);
+
+                $sheet->freezePane('A5');
+            },
+        ];
+    }
+}

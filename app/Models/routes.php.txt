@@ -1,0 +1,7 @@
+use App\Http\Controllers\Payroll\Settings\BsnsPaySettingController;
+
+
+ Route::resource('/payroll-business-setting', BsnsPaySettingController::class);
+
+                Route::post('/save-payroll-business-setting', [BsnsPaySettingController::class, 'storeOrUpdate'])
+                    ->name('payroll.setting.storeOrUpdate');

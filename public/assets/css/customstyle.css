@@ -1,0 +1,89 @@
+.export-button {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	border: 1px solid #ddd;
+	border-radius: 999px;
+	padding: 8px 14px;
+	font-size: 14px;
+	cursor: pointer;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+	transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.export-button:hover {
+	background-color: #f1f1f1;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.dropdown-menu-export {
+	font-size: 14px;
+	min-width: 140px;
+}
+
+.dropdown-menu-export .dropdown-item:hover {
+	background-color: #f8f9fa;
+}
+
+.custom-button {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	background-color: white;
+	border: 1px solid #ddd;
+	border-radius: 999px;
+	padding: 8px 14px;
+	font-size: 14px;
+	cursor: pointer;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+	transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.custom-button:hover {
+	background-color: #f1f1f1;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.custom-button svg {
+	width: 16px;
+	height: 16px;
+}
+
+.fit-content-width {
+	width: fit-content;
+}
+
+.description-div {
+	height: -webkit-fill-available;
+	font-size: 12px
+}
+
+/* 👇 For tablet size and smaller (≤ 991.98px by Bootstrap's md breakpoint) */
+@media (max-width: 991.98px) {
+	.description-div {
+		border-top: 1px solid #1877f2;
+	}
+}
+
+/* 👇 For larger than tablet (≥ 992px) */
+@media (min-width: 992px) {
+	.description-div {
+		border-left: 1px solid #1877f2;
+	}
+}
+
+.list-style-circle {
+	list-style: circle;
+}
+
+.fs-14 {
+	font-size: 14px !important;
+}
+
+.breadcrumb1-bg-none {
+	background: none !important;
+}
+
+.rounded-px-10 {
+	border-radius: 10px !important;
+}

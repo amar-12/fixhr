@@ -1,0 +1,33 @@
+/*================================================
+Gallery Area CSS
+=================================================*/
+.single-gallery-item {
+  margin-bottom: 30px;
+  overflow: hidden;
+  cursor: zoom-in;
+}
+.single-gallery-item a {
+  display: block;
+  border-radius: 5px;
+}
+.single-gallery-item a img {
+  transition: var(--transition);
+}
+.single-gallery-item.hover a img {
+  filter: blur(2px);
+  opacity: 0.5;
+}
+.single-gallery-item.hover:hover a img {
+  filter: blur(0);
+  opacity: 1;
+}
+.single-gallery-item:hover a img {
+  transform: scale(1.1);
+}
+
+/* Max width 767px */
+/* Min width 576px to Max width 767px */
+/* Min width 768px to Max width 991px */
+/* Min width 992px to Max width 1199px */
+/* Min width 1200px to Max width 1399px */
+/* Min width 1550px *//*# sourceMappingURL=gallery.css.map */
